@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 270 64" width="270" height="64" role="img" aria-label="ImageEnhance logo"><defs><linearGradient id="ieg" x1="0" y1="0" x2="1" y2="1">
+<stop offset="0" stop-color="#2563EB"/><stop offset="1" stop-color="#06B6D4"/></linearGradient></defs>
+<rect width="64" height="64" rx="14" fill="url(#ieg)"/>
+<rect x="11" y="14" width="42" height="36" rx="4" fill="none" stroke="#FFFFFF" stroke-width="3"/>
+<g fill="#FFFFFF">
+<rect x="15" y="43" width="5" height="5" opacity=".95"/><rect x="21" y="43" width="5" height="5" opacity=".95"/>
+<rect x="27" y="43" width="5" height="5" opacity=".95"/><rect x="21" y="37" width="5" height="5" opacity=".7"/>
+<rect x="27" y="37" width="5" height="5" opacity=".7"/><rect x="27" y="31" width="5" height="5" opacity=".45"/>
+<path d="M34 48 C37 38 40 34 43 40 C45 43 47 38 49 36 L49 48 Z" opacity=".95"/>
+<path d="M43 19 L44.4 22.6 L48 24 L44.4 25.4 L43 29 L41.6 25.4 L38 24 L41.6 22.6 Z"/>
+</g><text x="78" y="41" font-family="Inter, 'Segoe UI', Arial, sans-serif" font-size="30" font-weight="700" fill="#14213D">Image<tspan fill="#2563EB">Enhance</tspan></text></svg>

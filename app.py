@@ -32,7 +32,7 @@ from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 # =====================================================================
 
 APP_NAME = "ImageEnhance"
-TAGLINE = "Restore Clarity. Reveal Details."
+TAGLINE = "Restore Image Quality with Enhancement"
 PROJECT_TITLE = "Digital Image Restoration and Quality Enhancement"
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -329,6 +329,63 @@ def restore_image(degraded, s):
         h, w = result.shape[:2]
         result = cv2.resize(result, (w * f, h * f), interpolation=cv2.INTER_CUBIC)
     return result
+
+
+
+
+def analyze_image_quality(img):
+    """Heuristic image analysis; this is classical image processing, not an AI model."""
+    gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
+    sharpness = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+    contrast = float(gray.std())
+    smooth = cv2.medianBlur(gray, 3)
+    noise_estimate = float(np.median(np.abs(gray.astype(np.float32) - smooth.astype(np.float32))) * 1.4826)
+    recommendations = []
+    settings = DEFAULTS.copy()
+    settings["degradation"] = "None"
+
+    if noise_estimate >= 10:
+        settings["filter_method"] = "Bilateral Filter"
+        settings["bilateral_sigma"] = 60
+        recommendations.append(("Noise reduction", "Bilateral filtering is recommended to reduce visible noise while retaining edges."))
+    elif noise_estimate >= 4:
+        settings["filter_method"] = "Gaussian Filter"
+        settings["gauss_k"] = 3
+        recommendations.append(("Light noise", "A small Gaussian filter may reduce mild grain."))
+    else:
+        recommendations.append(("Noise", "No strong noise-reduction step was detected; the original texture will be preserved."))
+
+    if sharpness < 80:
+        settings["sharpening"] = True
+        settings["sharp_strength"] = 0.7
+        settings["sharp_radius"] = 1.5
+        recommendations.append(("Sharpness", "The image may be soft, so mild unsharp-mask sharpening is recommended."))
+    else:
+        recommendations.append(("Sharpness", "Edge sharpness looks reasonable; strong sharpening is not recommended."))
+
+    if contrast < 45:
+        settings["contrast"] = True
+        settings["clahe_clip"] = 2.0
+        recommendations.append(("Contrast", "Local contrast appears low; CLAHE is recommended to improve tonal detail."))
+
+    h, w = img.shape[:2]
+    if min(h, w) < 400:
+        recommendations.append(("Resolution", f"The image is relatively small ({w} × {h} px). Upscaling can enlarge it, but conventional interpolation cannot recreate missing detail."))
+    return {
+        "sharpness": sharpness,
+        "contrast": contrast,
+        "noise_estimate": noise_estimate,
+        "recommendations": recommendations,
+        "settings": settings,
+    }
+
+
+def apply_automatic_recommendation(analysis):
+    """Populate the existing controls with the heuristic recommendations."""
+    for key, value in analysis["settings"].items():
+        st.session_state[key] = value
+    st.session_state["exp_name"] = "Automatic restoration"
+    st.session_state["enhanced"] = True
 
 
 def degradation_text(s):
@@ -702,7 +759,7 @@ def current_settings():
 NAV_ITEMS = [
     ("workspace", "Image Workspace", ":material/home:"),
     ("saved", "Saved Images", ":material/folder:"),
-    ("history", "Experiment History", ":material/science:"),
+    ("history", "Processing History", ":material/science:"),
     ("help", "Help & Limitations", ":material/help:"),
 ]
 
@@ -737,14 +794,14 @@ def render_hero():
     st.markdown(
         f'<div class="hero"><img class="hero-logo" src="{logo_full_uri()}" alt="ImageEnhance">'
         f"<h1>{TAGLINE}</h1>"
-        "<p>Transform noisy, blurry, and low-resolution images using practical "
-        "digital image processing techniques.</p></div>",
+        "<p>Reduce noise, improve sharpness, enhance contrast, and upscale images "
+        "using digital image processing techniques.</p></div>",
         unsafe_allow_html=True,
     )
 
 
 def render_overview_cards():
-    section_header("sparkle", "What You Can Do", "Five classical techniques, each applied to the same input for fair comparison.")
+    section_header("sparkle", "Image Enhancement Techniques", "Five classical techniques, each applied to the same input for fair comparison.")
     cards = [
         ("restore", "Image Restoration", "Recover a cleaner image from a degraded copy."),
         ("noise", "Noise Reduction", "Remove Gaussian and salt-and-pepper noise with filters."),
@@ -759,7 +816,7 @@ def render_overview_cards():
 
 def handle_upload():
     """Show the uploader and keep the current image in session state."""
-    section_header("upload", "Upload Your Image", "Upload an image to begin your restoration workflow.")
+    section_header("upload", "Upload an Image", "Upload an image to begin your restoration workflow.")
     uploaded = st.file_uploader(
         "Choose a JPG, PNG, BMP, or TIFF image", type=ALLOWED_TYPES,
         key="main_upload", label_visibility="collapsed",
@@ -908,9 +965,9 @@ def render_comparison(s, reference, degraded, result):
             st.warning("The comparison slider could not be shown, so the side-by-side view is used instead.")
 
     if s["degradation"] == "None":
-        panels = [("Original", reference), ("Enhanced Output", result)]
+        panels = [("Original", reference), ("Restored Image", result)]
     else:
-        panels = [("Original", reference), ("Degraded Input", degraded), ("Enhanced Output", result)]
+        panels = [("Original", reference), ("Degraded Input", degraded), ("Restored Image", result)]
     for col, (label, img) in zip(st.columns(len(panels), gap="medium"), panels):
         with col:
             st.markdown(f"**{label}**")
@@ -1048,11 +1105,29 @@ def page_workspace():
         st.error(f"The image could not be opened: {exc}")
         return
 
+    # Analyze each newly uploaded image once and automatically apply a conservative
+    # classical restoration pipeline. The original upload is never overwritten.
+    analysis = analyze_image_quality(work)
+    if st.session_state.get("_auto_processed_sha") != source["sha"]:
+        apply_automatic_recommendation(analysis)
+        st.session_state["_auto_processed_sha"] = source["sha"]
+        st.session_state["_saved_settings"] = current_settings()
+
     render_image_info(source, work, full_size, resized)
+    with st.container(border=True):
+        section_header("sparkle", "Automatic Restoration Recommendation",
+                       "Heuristic analysis of noise, sharpness, and contrast; this is not an AI diagnosis.")
+        a1, a2, a3 = st.columns(3)
+        a1.metric("Estimated noise", f"{analysis['noise_estimate']:.1f}")
+        a2.metric("Sharpness score", f"{analysis['sharpness']:.1f}")
+        a3.metric("Contrast score", f"{analysis['contrast']:.1f}")
+        for title, reason in analysis["recommendations"]:
+            st.markdown(f"- **{title}:** {reason}")
+        st.caption("The app automatically applies these suggested classical methods on first upload. You can change any control below and select Enhance Image to run a different experiment.")
     render_controls()
 
     if not st.session_state["enhanced"]:
-        st.info("Adjust the controls above, then select **Enhance Image** to see your results.")
+        st.info("Choose any controls above and select **Enhance Image** to run a custom experiment.")
         st.session_state["_saved_settings"] = current_settings()
         return
 
@@ -1119,13 +1194,13 @@ def page_saved():
 
 
 def page_history():
-    page_header("Experiment History", "Every saved result is logged with its settings and measurements.")
+    page_header("Processing History", "Every saved result is logged with its settings and measurements.")
     rows = read_log()
     if not rows:
         empty_state("No experiments logged yet",
                     "Save a result from the workspace to start your experiment log.")
         return
-    section_header("flask", "Experiment History", f"{len(rows)} logged experiment(s), newest first.")
+    section_header("flask", "Processing History", f"{len(rows)} logged experiment(s), newest first.")
     cols = st.columns(3, gap="medium")
     for i, row in enumerate(reversed(rows[-12:])):
         with cols[i % 3]:

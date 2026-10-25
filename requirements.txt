@@ -1,2 +1,5 @@
-opencv-python-headless
+streamlit
+opencv-contrib-python-headless
 scikit-image
+numpy
+Pillow
